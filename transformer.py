@@ -34,8 +34,7 @@ class Head(nn.Module):
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
         self.register_buffer('tril', torch.tril(torch.ones(context_size,context_size)))
-
-        self.dropout = nn.Dropout(dropout)
+        self.dropuot = nn.Dropout(dropout)
 
     def forward(self, x):
         B,T,C = x.shape
@@ -44,10 +43,10 @@ class Head(nn.Module):
         v = self.value(x)
 
         wei = q @ k.transpose(-2,-1) / np.sqrt(C)
-        wei = wei.masked_fill(self.tril[n_head:T, :T] == 0, float('-inf'))
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
         wei = F.softmax(wei, dim=-1)
 
-        wei = self.dropout(wei)
+        wei = self.dropuot(wei)
 
         out = wei @ v
         return out
@@ -58,7 +57,6 @@ class MultiHeadAttantion(nn.Module):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(num_head)])
         self.proj = nn.Linear(n_embed, n_embed)
-        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         out = torch.cat([h(x) for h in self.heads], dim = -1)
@@ -69,7 +67,7 @@ class MultiHeadAttantion(nn.Module):
 class FeedForward(nn.Module):
     def __init__(self, n_embed):
         super().__init__()
-        self.net = nn.Sequential(nn.Linear(n_embed, 4 * n_embed), nn.ReLU(),nn.Linear(4 * n_embed, n_embed), nn.Dropout(dropout))
+        self.net = nn.Sequential(nn.Linear(n_embed, 4 * n_embed), nn.ReLU(),nn.Linear(4 * n_embed, n_embed),  nn.Dropout(dropout))
 
     def forward(self, x):
         return self.net(x)
@@ -95,7 +93,7 @@ class TransformerLanguageModel(nn.Module):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embed)
         self.position_embedding_table = nn.Embedding(context_size, n_embed)
-        self.blocks = nn.Sequential(*[Block(n_embed, n_head=n_head) for _ in range(n_layer)])
+        self.blocks = nn.Sequential(*[Block(n_embed=n_embed, n_head=n_head) for _ in range(n_layers)])
         self.ln_f = nn.LayerNorm(n_embed)
         self.lm_head = nn.Linear(n_embed, vocab_size)
 
@@ -132,25 +130,24 @@ class TransformerLanguageModel(nn.Module):
 
 
 if __name__ == '__main__':
-    text = utils.load_text("/home/fedor/scicodes/ml/nano-gpt-tutorial/data/Pushkin.txt")
+    text = utils.load_text("data/Pushkin.txt")
     itos, _, encode, decode = utils.get_vocabulary(text)
     train_data, val_data = utils.get_train_val_split(0.9, text)
 
     vocab_size = len(itos)
     context_size = 124
-    batch_size = 32
-    n_embed = 64
-    n_head = 6
-    n_layer = 6
+    batch_size = 64
+    n_embed = 256
 
-    dropout = 0.2
-
-    max_iters = 10000
+    max_iters = 5000
     eval_interval = 500
     learning_rate = 3e-4
     device = 'cuda'
 
+    n_head = 8
+    n_layers = 6
     eval_iters = 200
+    dropout = 0.25
 
     model = TransformerLanguageModel()
     model = model.to(device)
@@ -170,5 +167,5 @@ if __name__ == '__main__':
         loss.backward()
         optimizer.step()
 
-    context = torch.ones((1,1), dtype=torch.long, device=device)
+    context = torch.tensor([encode("Зима! Очей очарование ")], dtype=torch.long, device=device)
     print(decode(model.generate(context, max_new_tokens=500)[0].tolist()))
