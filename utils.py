@@ -1,5 +1,37 @@
+from pathlib import Path
 from typing import Callable
 import torch
+import yaml
+
+from model import ModelConfig
+from train import TrainConfig
+
+
+
+def load_config(path: str | Path):
+    """Load ``train`` and ``model`` sections from a YAML file.
+
+    The model section is converted to :class:`model.ModelConfig`; the train
+    section is converted to :class:`TrainConfig`. GPT-2 loading options are
+    intentionally not part of this configuration surface.
+    """
+
+    with Path(path).open("r", encoding="utf-8") as stream:
+        raw = yaml.safe_load(stream) or {}
+    if not isinstance(raw, dict):
+        raise ValueError("config YAML must contain a mapping")
+
+    train_values = raw.get("train", {})
+    model_values = raw.get("model", {})
+    if not isinstance(train_values, dict) or not isinstance(model_values, dict):
+        raise ValueError("'train' and 'model' sections must be mappings")
+
+    # Keep the format invariant in code, rather than allowing a future
+    # checkpoint backend to be selected accidentally from YAML.
+    train_values = dict(train_values)
+    train_values["checkpoint_format"] = "safetensors"
+    return TrainConfig(**train_values), ModelConfig(**model_values)
+
 
 def load_text(path: str) -> str:
     with open(path, 'r') as t:
@@ -62,5 +94,3 @@ def estimate_loss(
 
     model.train()
     return out
-
-
